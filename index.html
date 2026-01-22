@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>LONACI Expert - Bilan Détaillé</title>
+    <title>LONACI Expert - Système Intégral</title>
     <style>
         :root{ --primary:#1e40af; --bg:#f1f5f9; --success:#059669; --warning:#7c3aed; --danger:#dc2626; }
         body{margin:0;font-family:Arial, sans-serif;background:var(--bg);color:#333}
@@ -30,7 +30,7 @@
 </head>
 <body>
 
-<header>LONACI - GESTION COMMERCIALE</header>
+<header>LONACI - GESTION COMMERCIALE CLOUD</header>
 
 <nav>
     <button class="active" onclick="tab('dash', this)">DASHBOARD</button>
@@ -64,21 +64,14 @@
         <input type="number" id="vAmount" placeholder="Montant Recette">
         <button class="btn-save" onclick="addVente()">ENREGISTRER</button>
     </div>
-    <div class="card">
-        <h3>Dernières saisies</h3>
-        <table id="tableVentes"></table>
-    </div>
+    <div class="card"><h3>Dernières saisies</h3><table id="tableVentes"></table></div>
 </section>
 
 <section id="charges">
     <div class="card">
         <h3>Saisir une Charge</h3>
-        <select id="cCat">
-            <option>Loyer</option><option>Électricité</option><option>Eau</option>
-            <option>Internet/Téléphone</option><option>Salaires</option><option>Autres</option>
-        </select>
-        <input type="number" id="cAmount" placeholder="Montant">
-        <input type="date" id="cDate">
+        <select id="cCat"><option>Loyer</option><option>Électricité</option><option>Eau</option><option>Salaires</option><option>Autres</option></select>
+        <input type="number" id="cAmount" placeholder="Montant"><input type="date" id="cDate">
         <button style="background:var(--danger);color:white;border:none" onclick="addCharge()">AJOUTER</button>
     </div>
     <div class="card"><table id="tableCharges"></table></div>
@@ -94,29 +87,40 @@
 </section>
 
 <section id="config">
+    <div class="card" style="border: 2px solid var(--success)">
+        <h3>☁️ Synchronisation par Mail (Google)</h3>
+        <button style="background:var(--primary);color:white;border:none" onclick="handleAuth()">1. Connexion Compte Google</button>
+        <div id="cloudBtns" style="display:none; flex-direction:column; gap:8px; margin-top:10px">
+            <button class="btn-save" onclick="saveToDrive()">📤 Sauvegarder sur Drive</button>
+            <button style="background:var(--warning);color:white;border:none" onclick="loadFromDrive()">📥 Restaurer depuis Drive</button>
+        </div>
+    </div>
+
     <div class="card">
         <h3>Services & Taux</h3>
-        <input id="sName" placeholder="Nom du service">
-        <input type="number" id="sRate" placeholder="Taux en % (ex: 5)">
+        <input id="sName" placeholder="Nom service"><input type="number" id="sRate" placeholder="Taux %">
         <button class="btn-save" onclick="addService()">Ajouter</button>
         <table id="tableServices"></table>
     </div>
+
     <div class="card">
-        <h3>Agents</h3>
-        <input id="aCode" placeholder="Code Agent">
-        <input id="aName" placeholder="Nom Complet">
+        <h3>Gestion des Agents</h3>
+        <input id="aCode" placeholder="Code Agent"><input id="aName" placeholder="Nom Complet">
         <select id="aService" onchange="showRateInfo()"></select>
         <p id="rateInfo" style="color:var(--primary); font-weight:bold; font-size:0.8rem">Taux: -</p>
-        <button class="btn-save" onclick="addAgent()">Ajouter sans effacer</button>
+        <button class="btn-save" onclick="addAgent()">Ajouter Agent</button>
         <table id="tableAgents"></table>
     </div>
 </section>
 
+<script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+<script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+
 <script>
-let db = JSON.parse(localStorage.getItem('lonaci_master_v2')) || { services: [], agents: [], ventes: [], charges: [] };
+let db = JSON.parse(localStorage.getItem('lonaci_cloud_v1')) || { services: [], agents: [], ventes: [], charges: [] };
 const months = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 
-function save() { localStorage.setItem('lonaci_master_v2', JSON.stringify(db)); render(); }
+function save() { localStorage.setItem('lonaci_cloud_v1', JSON.stringify(db)); render(); }
 function tab(id, btn) {
     document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -124,149 +128,107 @@ function tab(id, btn) {
     btn.classList.add('active');
 }
 
-// LOGIQUE CONFIG
+// CONFIGURATION
 function addService() {
-    const n = document.getElementById('sName').value;
-    const r = document.getElementById('sRate').value;
-    if(n && r) {
-        db.services.push({ name: n, rate: parseFloat(r)/100 });
-        document.getElementById('sName').value = ""; document.getElementById('sRate').value = "";
-        save();
-    }
+    const n = document.getElementById('sName').value; const r = document.getElementById('sRate').value;
+    if(n && r) { db.services.push({ name: n, rate: parseFloat(r)/100 }); save(); }
+}
+function addAgent() {
+    const c = document.getElementById('aCode').value; const n = document.getElementById('aName').value;
+    const sn = document.getElementById('aService').value;
+    if(!c || !n || !sn) return alert("Champs incomplets");
+    const s = db.services.find(x => x.name === sn);
+    db.agents.push({ code: c, name: n, service: sn, rate: s.rate });
+    save(); alert("Agent ajouté !");
 }
 function showRateInfo() {
     const s = db.services.find(x => x.name === document.getElementById('aService').value);
     document.getElementById('rateInfo').textContent = s ? `Taux : ${s.rate * 100}%` : "Taux : -";
 }
-function addAgent() {
-    const c = document.getElementById('aCode').value;
-    const n = document.getElementById('aName').value;
-    const sn = document.getElementById('aService').value;
-    if(!c || !n || !sn) return alert("Champs incomplets");
-    const s = db.services.find(x => x.name === sn);
-    db.agents.push({ code: c, name: n, service: sn, rate: s.rate });
-    save();
-    alert("Agent ajouté ! Les champs sont conservés.");
-}
 
-// LOGIQUE VENTES & CHARGES
+// VENTES & CHARGES
 function updateAgentList() {
     const sn = document.getElementById('vService').value;
     const filtered = db.agents.filter(a => a.service === sn);
     document.getElementById('vAgent').innerHTML = filtered.map(a => `<option value="${a.code}">${a.name}</option>`).join("");
 }
 function addVente() {
-    const ac = document.getElementById('vAgent').value;
-    const am = parseFloat(document.getElementById('vAmount').value);
+    const ac = document.getElementById('vAgent').value; const am = parseFloat(document.getElementById('vAmount').value);
     const agent = db.agents.find(a => a.code === ac);
     if(!agent || isNaN(am)) return alert("Veuillez remplir le montant");
     db.ventes.push({
         date: `${document.getElementById('vDay').value || new Date().getDate()}/${Number(document.getElementById('vMonth').value)+1}/2026`,
         agent: agent.name, service: agent.service, amount: am, commission: am * agent.rate
     });
-    document.getElementById('vAmount').value = "";
-    save();
+    document.getElementById('vAmount').value = ""; save();
 }
 function addCharge() {
-    const am = parseFloat(document.getElementById('cAmount').value);
-    const dt = document.getElementById('cDate').value;
+    const am = parseFloat(document.getElementById('cAmount').value); const dt = document.getElementById('cDate').value;
     if(isNaN(am) || !dt) return alert("Date et montant requis");
     db.charges.push({ date: dt, cat: document.getElementById('cCat').value, amount: am });
-    document.getElementById('cAmount').value = "";
-    save();
+    document.getElementById('cAmount').value = ""; save();
 }
 
-// BILAN AVEC DATE ET VENTE (CORRIGÉ)
+// BILAN DÉTAILLÉ
 function generateReport() {
     const mIdx = Number(document.getElementById('bMonth').value);
-    const mNum = mIdx + 1;
-    const filtered = db.ventes.filter(v => v.date.includes(`/${mNum}/2026`));
+    const filtered = db.ventes.filter(v => v.date.includes(`/${mIdx+1}/2026`));
+    if(filtered.length === 0) { document.getElementById('reportArea').innerHTML = "<p>Aucune donnée.</p>"; return; }
     
-    if(filtered.length === 0) {
-        document.getElementById('reportArea').innerHTML = `<p style="text-align:center">Aucune vente enregistrée pour ${months[mIdx]}</p>`;
-        return;
-    }
-
-    let totalVentes = 0;
-    let totalComms = 0;
-
-    let html = `<div class="card">
-        <h3>Bilan Complet : ${months[mIdx]} 2026</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Agent</th>
-                    <th>Service</th>
-                    <th>Vente (Recette)</th>
-                    <th>Commission</th>
-                </tr>
-            </thead>
-            <tbody>`;
-
+    let tv = 0, tc = 0;
+    let html = `<div class="card"><h3>Bilan ${months[mIdx]}</h3><table><tr><th>Date</th><th>Agent</th><th>Vente</th><th>Comm.</th></tr>`;
     filtered.forEach(v => {
-        totalVentes += v.amount;
-        totalComms += v.commission;
-        html += `<tr>
-            <td>${v.date}</td>
-            <td>${v.agent}</td>
-            <td>${v.service}</td>
-            <td style="font-weight:bold">${v.amount.toLocaleString()} F</td>
-            <td style="color:var(--success); font-weight:bold">${v.commission.toLocaleString()} F</td>
-        </tr>`;
+        tv += v.amount; tc += v.commission;
+        html += `<tr><td>${v.date}</td><td>${v.agent}</td><td>${v.amount.toLocaleString()}</td><td>${v.commission.toLocaleString()}</td></tr>`;
     });
-
-    html += `</tbody>
-            <tfoot class="total-row">
-                <tr>
-                    <td colspan="3">TOTAL MENSUEL</td>
-                    <td>${totalVentes.toLocaleString()} FCFA</td>
-                    <td style="color:var(--success)">${totalComms.toLocaleString()} FCFA</td>
-                </tr>
-            </tfoot>
-        </table>
-    </div>`;
-
+    html += `<tr class="total-row"><td colspan="2">TOTAL</td><td>${tv.toLocaleString()} F</td><td>${tc.toLocaleString()} F</td></tr></table></div>`;
     document.getElementById('reportArea').innerHTML = html;
+}
+
+// CLOUD DRIVE (SYNC PAR MAIL)
+const CLIENT_ID = '642215240533-ko9t9ulmq5igcqv3csuhvuaptkmc96nt.apps.googleusercontent.com';
+let tokenClient;
+function gapiLoaded() { gapi.load('client', () => gapi.client.init({apiKey: 'AIzaSyBMjWoe9Y3WnTLPbh3nqSxoG799Tj9tu9M', discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"]})); }
+function gisLoaded() { tokenClient = google.accounts.oauth2.initTokenClient({client_id: CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.file', callback: (t) => { if(t) document.getElementById('cloudBtns').style.display='flex'; }}); }
+function handleAuth() { tokenClient.requestAccessToken(); }
+async function saveToDrive() {
+    const metadata = { name: 'lonaci_db.json', mimeType: 'application/json' };
+    const file = new Blob([JSON.stringify(db)], {type: 'application/json'});
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
+    form.append('file', file);
+    await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method: 'POST', headers: { Authorization: 'Bearer ' + gapi.client.getToken().access_token }, body: form });
+    alert("✅ Sauvegarde effectuée !");
+}
+async function loadFromDrive() {
+    const response = await gapi.client.drive.files.list({ q: "name='lonaci_db.json'", fields: 'files(id)' });
+    if (response.result.files.length > 0) {
+        const res = await gapi.client.drive.files.get({ fileId: response.result.files[0].id, alt: 'media' });
+        if(confirm("Importer les données du cloud ?")) { db = res.result; save(); }
+    }
 }
 
 function render() {
     const sOpts = db.services.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
-    document.getElementById('vService').innerHTML = sOpts;
-    document.getElementById('aService').innerHTML = sOpts;
+    document.getElementById('vService').innerHTML = sOpts; document.getElementById('aService').innerHTML = sOpts;
     const mOpts = months.map((m,i)=>`<option value="${i}">${m}</option>`).join("");
-    document.getElementById('vMonth').innerHTML = mOpts;
-    document.getElementById('bMonth').innerHTML = mOpts;
+    document.getElementById('vMonth').innerHTML = mOpts; document.getElementById('bMonth').innerHTML = mOpts;
 
-    document.getElementById('tableServices').innerHTML = `<tr><th>Nom</th><th>Taux</th><th>X</th></tr>` + 
-        db.services.map((s,i)=>`<tr><td>${s.name}</td><td>${s.rate*100}%</td><td class="delete" onclick="db.services.splice(${i},1);save()">✖</td></tr>`).join("");
+    document.getElementById('tableServices').innerHTML = `<tr><th>Service</th><th>Taux</th></tr>` + db.services.map(s=>`<tr><td>${s.name}</td><td>${s.rate*100}%</td></tr>`).join("");
+    document.getElementById('tableAgents').innerHTML = `<tr><th>Code</th><th>Nom</th></tr>` + db.agents.map(a=>`<tr><td>${a.code}</td><td>${a.name}</td></tr>`).join("");
+    document.getElementById('tableVentes').innerHTML = `<tr><th>Agent</th><th>Recette</th></tr>` + db.ventes.slice(-5).reverse().map(v=>`<tr><td>${v.agent}</td><td>${v.amount.toLocaleString()}</td></tr>`).join("");
+    document.getElementById('tableCharges').innerHTML = `<tr><th>Date</th><th>Montant</th></tr>` + db.charges.slice(-5).reverse().map(c=>`<tr><td>${c.date}</td><td>${c.amount.toLocaleString()}</td></tr>`).join("");
 
-    document.getElementById('tableAgents').innerHTML = `<tr><th>Code</th><th>Nom</th><th>X</th></tr>` + 
-        db.agents.map((a,i)=>`<tr><td>${a.code}</td><td>${a.name}</td><td class="delete" onclick="db.agents.splice(${i},1);save()">✖</td></tr>`).join("");
-
-    document.getElementById('tableVentes').innerHTML = `<tr><th>Agent</th><th>Montant</th><th>Comm.</th></tr>` + 
-        db.ventes.slice(-5).reverse().map(v=>`<tr><td>${v.agent}</td><td>${v.amount.toLocaleString()}</td><td>${v.commission.toLocaleString()}</td></tr>`).join("");
-
-    document.getElementById('tableCharges').innerHTML = `<tr><th>Date</th><th>Catégorie</th><th>Montant</th></tr>` + 
-        db.charges.slice(-5).reverse().map(c=>`<tr><td>${c.date}</td><td>${c.cat}</td><td>${c.amount.toLocaleString()}</td></tr>`).join("");
-
-    const mNum = new Date().getMonth() + 1;
-    const curV = db.ventes.filter(v => v.date.includes(`/${mNum}/2026`));
-    const curC = db.charges.filter(c => c.date.includes(`-0${mNum}-`) || c.date.includes(`-${mNum}-`));
-    const tRec = curV.reduce((s,v)=>s+v.amount,0);
-    const tCom = curV.reduce((s,v)=>s+v.commission,0);
-    const tCha = curC.reduce((s,c)=>s+c.amount,0);
-
-    document.getElementById('dashRecette').textContent = tRec.toLocaleString() + " F";
-    document.getElementById('dashComm').textContent = tCom.toLocaleString() + " F";
-    document.getElementById('dashCharge').textContent = tCha.toLocaleString() + " F";
-    document.getElementById('dashNet').textContent = (tCom - tCha).toLocaleString() + " FCFA";
-    document.getElementById('dashNet').style.color = (tCom - tCha) >= 0 ? "#10b981" : "#ef4444";
-
+    const m = new Date().getMonth() + 1;
+    const curV = db.ventes.filter(v => v.date.includes(`/${m}/2026`));
+    const curC = db.charges.filter(c => c.date.includes(`-0${m}-`) || c.date.includes(`-${m}-`));
+    const tR = curV.reduce((s,v)=>s+v.amount,0); const tCo = curV.reduce((s,v)=>s+v.commission,0); const tCh = curC.reduce((s,c)=>s+c.amount,0);
+    document.getElementById('dashRecette').textContent = tR.toLocaleString() + " F";
+    document.getElementById('dashComm').textContent = tCo.toLocaleString() + " F";
+    document.getElementById('dashCharge').textContent = tCh.toLocaleString() + " F";
+    document.getElementById('dashNet').textContent = (tCo - tCh).toLocaleString() + " FCFA";
     updateAgentList();
-    showRateInfo();
 }
-
 render();
 </script>
 </body>
